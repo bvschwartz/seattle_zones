@@ -54,8 +54,8 @@ class BuildZonesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.labelled = zones.label_streets(synthetic_streets())
-        cls.features = {f["properties"]["zone"]: shape(f["geometry"])
-                        for f in zones.build_zones(cls.labelled)}
+        cls.raw = zones.build_zones(cls.labelled)
+        cls.features = {f["properties"]["zone"]: shape(f["geometry"]) for f in cls.raw}
 
     def test_every_zone_found(self):
         self.assertEqual(set(self.features), {"NW", "N", "NE", "none", "E", "SW", "S"})
@@ -69,6 +69,15 @@ class BuildZonesTest(unittest.TestCase):
         for zone, (lon, lat) in probes.items():
             with self.subTest(zone=zone):
                 self.assertTrue(self.features[zone].contains(Point(lon, lat)))
+
+    def test_label_points_inside_zone(self):
+        for f in self.raw:
+            zone = f["properties"]["zone"]
+            points = f["properties"]["label_points"]
+            with self.subTest(zone=zone):
+                self.assertGreaterEqual(len(points), 1)
+                for lon, lat in points:
+                    self.assertTrue(self.features[zone].contains(Point(lon, lat)))
 
     def test_lake_left_empty(self):
         centre = Point((LAKE[0] + LAKE[1]) / 2, (LAKE[2] + LAKE[3]) / 2)

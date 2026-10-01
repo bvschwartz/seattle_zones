@@ -18,7 +18,7 @@ from scipy.ndimage import generic_filter
 from scipy.spatial import cKDTree
 from shapely import box, union_all
 from shapely.geometry import mapping
-from shapely.ops import transform
+from shapely.ops import polylabel, transform
 
 from .directions import NONE, parse_direction
 
@@ -75,7 +75,8 @@ def _mode(values):
 
 
 def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
-                k=24, unlabeled_weight=0.5, smooth_passes=2, min_area=40_000.0):
+                k=24, unlabeled_weight=0.5, smooth_passes=2, min_area=40_000.0,
+                label_area=3e6):
     """Compute zone polygons.
 
     labelled: output of label_streets.
@@ -84,6 +85,8 @@ def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
     this from every street is treated as not-land/no-street and left empty.
     unlabeled_weight: vote weight for streets with no directional.
     min_area: drop polygon pieces smaller than this (m^2).
+    label_area: besides the largest piece, pieces at least this big (m^2) get
+    their own label point.
 
     Returns a list of GeoJSON features, one per zone.
     """
@@ -143,13 +146,26 @@ def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
         if geom.is_empty:
             continue
         area = geom.area
+        labels = _label_points(geom, label_area, cell)
         geom = transform(lambda x, y, z=None: proj.inverse(x, y), geom)
         features.append({
             "type": "Feature",
-            "properties": {"zone": name, "area_km2": round(area / 1e6, 2)},
+            "properties": {
+                "zone": name,
+                "area_km2": round(area / 1e6, 2),
+                "label_points": [[round(float(c), 6) for c in proj.inverse(x, y)]
+                                 for x, y in labels],
+            },
             "geometry": mapping(geom),
         })
     return features
+
+
+def _label_points(geom, label_area, tolerance):
+    """Interior points far from the edges: the largest piece, plus big ones."""
+    parts = sorted(getattr(geom, "geoms", [geom]), key=lambda p: p.area, reverse=True)
+    parts = parts[:1] + [p for p in parts[1:] if p.area >= label_area]
+    return [polylabel(p, tolerance).coords[0] for p in parts]
 
 
 def _cells_to_polygon(mask, xmin, ymin, cell):

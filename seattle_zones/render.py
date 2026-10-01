@@ -9,7 +9,7 @@ COLORS = {
     "none": "#7f7f7f",
 }
 
-LABELS = {"none": "No directional (downtown)"}
+LABELS = {"none": "no direction"}
 
 TEMPLATE = """<!doctype html>
 <html lang="en">
@@ -21,10 +21,10 @@ TEMPLATE = """<!doctype html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   html, body, #map { height: 100%; margin: 0; }
-  .legend { background: #fff; padding: 8px 10px; font: 13px/1.5 system-ui, sans-serif;
-            border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
-  .legend i { display: inline-block; width: 12px; height: 12px; margin-right: 6px;
-              vertical-align: -1px; opacity: .8; }
+  .zone-label { color: #000; font: bold 18px/20px system-ui, sans-serif; white-space: nowrap;
+                text-align: center; pointer-events: none;
+                text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
+  .zone-label.small { font-size: 13px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -53,19 +53,19 @@ const streetLayer = L.geoJSON(streets, {
   style: f => ({ color: color(f.properties.zone), weight: 1.5, opacity: 0.9 }),
   onEachFeature: (f, l) => l.bindTooltip(f.properties.name, { sticky: true })
 });
-map.fitBounds(zoneLayer.getBounds());
-L.control.layers(null, { "Zones": zoneLayer, "Streets (by suffix)": streetLayer },
-                 { collapsed: false }).addTo(map);
+// Zone names at a point well inside each region (computed in zones.py).
+const labelLayer = L.layerGroup(zones.features.flatMap(f =>
+  (f.properties.label_points || []).map(([lon, lat]) => {
+    const text = labels[f.properties.zone] || f.properties.zone;
+    const cls = "zone-label" + (text.length > 2 ? " small" : "");
+    return L.marker([lat, lon], { interactive: false, keyboard: false,
+      icon: L.divIcon({ className: cls, html: text, iconSize: [120, 20], iconAnchor: [60, 10] }) });
+  }))).addTo(map);
 
-const legend = L.control({ position: "bottomright" });
-legend.onAdd = () => {
-  const div = L.DomUtil.create("div", "legend");
-  div.innerHTML = zones.features.map(f =>
-    `<div><i style="background:${color(f.properties.zone)}"></i>` +
-    `${labels[f.properties.zone] || f.properties.zone}</div>`).join("");
-  return div;
-};
-legend.addTo(map);
+map.fitBounds(zoneLayer.getBounds());
+L.control.layers(null, { "Zones": zoneLayer, "Labels": labelLayer,
+                         "Streets (by suffix)": streetLayer },
+                 { collapsed: false }).addTo(map);
 </script>
 </body>
 </html>
