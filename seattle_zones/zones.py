@@ -74,12 +74,14 @@ def _mode(values):
     return best
 
 
-def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
+def build_zones(labelled, boundary=None, cell=50.0, step=20.0, radius=250.0, reach=150.0,
                 k=24, unlabeled_weight=0.5, smooth_passes=2, fill_area=0.8e6,
                 label_area=3e6):
     """Compute zone polygons.
 
     labelled: output of label_streets.
+    boundary: optional shapely (Multi)Polygon in lon/lat; zones are trimmed to
+    it. Streets that cross the city limit otherwise poke out past it.
     cell: grid cell size (m). step: sampling interval along streets (m).
     radius: how far a street point can vote (m). reach: a cell further than
     this from every street is treated as not-land/no-street and left empty.
@@ -119,24 +121,30 @@ def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
     cx, cy = np.meshgrid(gx, gy)
     centres = np.column_stack([cx.ravel(), cy.ravel()])
 
+    # Only cells near a street vote; on a county-sized grid most cells are
+    # forest or water, so this keeps memory and time down.
+    nearest, _ = tree.query(centres, distance_upper_bound=reach)
+    on_land = np.isfinite(nearest)
     # A list k always yields 2-D results, even when only one neighbour fits.
-    dist, idx = tree.query(centres, k=list(range(1, min(k, len(pts)) + 1)),
+    dist, idx = tree.query(centres[on_land], k=list(range(1, min(k, len(pts)) + 1)),
                            distance_upper_bound=radius)
     valid = np.isfinite(dist)
     safe_idx = np.where(valid, idx, 0)
     w = np.where(valid, weight[safe_idx] / (dist + 25.0), 0.0)
-    votes = np.zeros((len(centres), len(zones)))
+    votes = np.zeros((len(dist), len(zones)))
     for z in range(len(zones)):
         votes[:, z] = np.where(lab[safe_idx] == z, w, 0.0).sum(axis=1)
 
-    grid = votes.argmax(axis=1).astype(float)
-    on_land = np.where(valid[:, 0], dist[:, 0], np.inf) <= reach
-    grid[~on_land] = -1
+    grid = np.full(len(centres), -1.0)
+    grid[on_land] = votes.argmax(axis=1)
     grid = grid.reshape(ny, nx)
 
     for _ in range(smooth_passes):
         smoothed = generic_filter(grid, _mode, size=3, mode="constant", cval=-1)
         grid = np.where(grid >= 0, smoothed, -1)
+
+    if boundary is not None:
+        boundary = transform(lambda x, y, z=None: proj.forward(x, y), boundary)
 
     features = []
     for z, name in enumerate(zones):
@@ -144,6 +152,10 @@ def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
         if geom.is_empty:
             continue
         geom = geom.buffer(cell * 0.6, join_style="round").buffer(-cell * 0.6).simplify(cell / 2)
+        if boundary is not None:
+            geom = _polygons_only(geom.intersection(boundary))
+            if geom.is_empty:
+                continue
         geom = _drop_specks_and_fill_holes(geom, fill_area)
         area = geom.area
         labels = _label_points(geom, label_area, cell)
@@ -159,6 +171,12 @@ def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
             "geometry": mapping(geom),
         })
     return features
+
+
+def _polygons_only(geom):
+    """Clipping can leave stray lines/points along shared edges; keep areas."""
+    parts = getattr(geom, "geoms", [geom])
+    return union_all([p for p in parts if p.geom_type in ("Polygon", "MultiPolygon")])
 
 
 def _drop_specks_and_fill_holes(geom, fill_area):

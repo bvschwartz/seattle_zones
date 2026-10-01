@@ -10,15 +10,26 @@ from . import render, sources, zones
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog="seattle_zones",
-        description="Map the extent of Seattle's N/NE/NW/E/W/S/SE/SW street-name zones.")
+        description="Map the extent of the N/NE/NW/E/W/S/SE/SW street-name zones "
+                    "of Seattle, or any other Washington city or county.")
+    p.add_argument("--place", default="Seattle",
+                   help='city or county name as OpenStreetMap has it, e.g. "Snohomish County"')
+    p.add_argument("--admin-level", type=int,
+                   help="OpenStreetMap admin_level: 8 for a city, 6 for a county "
+                   "(default: 6 if the name ends in County, else 8)")
+    p.add_argument("--state", default="US-WA", help="ISO code of the state the place is in")
     p.add_argument("--geojson", help="read street centerlines from this GeoJSON "
                    "instead of downloading from OpenStreetMap")
     p.add_argument("--name-field", help="street-name property in --geojson "
                    f"(default: first of {', '.join(sources.NAME_FIELDS)})")
-    p.add_argument("--cache", default="data/osm_streets.json",
-                   help="where to cache the OpenStreetMap download")
+    p.add_argument("--cache", help="where to cache the OpenStreetMap download "
+                   "(default: data/<place>.json)")
+    p.add_argument("--boundary", help="GeoJSON polygon to trim zones to (with --geojson; "
+                   "the OpenStreetMap download includes the boundary)")
+    p.add_argument("--no-clip", action="store_true",
+                   help="don't trim zones to the place boundary")
     p.add_argument("--refresh", action="store_true", help="re-download OSM data")
-    p.add_argument("--out", default="output", help="output directory")
+    p.add_argument("--out", help="output directory (default: output/<place>)")
     p.add_argument("--cell", type=float, default=50.0, help="grid cell size in metres")
     p.add_argument("--radius", type=float, default=250.0,
                    help="how far a street influences the zone vote, in metres")
@@ -33,10 +44,20 @@ def main(argv=None):
                    help="leave the street layer out of the HTML map (smaller file)")
     args = p.parse_args(argv)
 
+    if args.admin_level is None:
+        args.admin_level = 6 if args.place.lower().endswith(" county") else 8
+    args.out = args.out or os.path.join("output", sources.slug(args.place))
+
     if args.geojson:
         raw = sources.load_geojson(args.geojson, args.name_field)
+        boundary = sources.load_boundary(args.boundary) if args.boundary else None
     else:
-        raw = sources.fetch_osm(args.cache, refresh=args.refresh)
+        raw, boundary = sources.fetch_osm(args.place, args.admin_level, args.state,
+                                          args.cache, refresh=args.refresh)
+        if boundary is None:
+            print("warning: no boundary found in OpenStreetMap; zones won't be trimmed")
+    if args.no_clip:
+        boundary = None
     labelled = zones.label_streets(raw)
     if not labelled:
         p.error("no named streets found in the input")
@@ -44,7 +65,7 @@ def main(argv=None):
     for zone, n in sorted(zones.zone_counts(labelled).items()):
         print(f"  {zone:>4}: {n}")
 
-    features = zones.build_zones(labelled, cell=args.cell, radius=args.radius,
+    features = zones.build_zones(labelled, boundary, cell=args.cell, radius=args.radius,
                                  reach=args.reach, unlabeled_weight=args.unlabeled_weight,
                                  fill_area=args.fill_area * 1e6)
     zone_fc = {"type": "FeatureCollection", "features": features}
@@ -56,7 +77,8 @@ def main(argv=None):
     with open(os.path.join(args.out, "streets.geojson"), "w") as f:
         json.dump(street_fc, f)
     render.write_map(os.path.join(args.out, "map.html"), zone_fc,
-                     None if args.no_streets else street_fc)
+                     None if args.no_streets else street_fc,
+                     title=f"{args.place} Directional Zones")
 
     print("zone areas:")
     for feat in features:

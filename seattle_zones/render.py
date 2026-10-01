@@ -1,6 +1,7 @@
 """Write a self-contained Leaflet map of the zones."""
 
 import json
+from html import escape as html_escape
 
 COLORS = {
     "N": "#1f77b4", "NE": "#2ca02c", "NW": "#17becf",
@@ -16,7 +17,7 @@ TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Seattle Directional Zones</title>
+<title>__TITLE__</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
@@ -95,8 +96,9 @@ L.control.layers(bases, { "Zones": zoneLayer, "Labels": labelLayer,
 """
 
 
-def write_map(path, zones, streets=None):
+def write_map(path, zones, streets=None, title="Seattle Directional Zones"):
     html = (TEMPLATE
+            .replace("__TITLE__", html_escape(title))
             .replace("__ZONES__", json.dumps(zones))
             .replace("__STREETS__", json.dumps(streets or {"type": "FeatureCollection", "features": []}))
             .replace("__COLORS__", json.dumps(COLORS))
