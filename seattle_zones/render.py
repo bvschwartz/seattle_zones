@@ -82,9 +82,10 @@ const labelLayer = L.layerGroup(zones.features.filter(f => f.properties.zone !==
   }))).addTo(map);
 
 map.fitBounds(zoneLayer.getBounds());
-let bases = { "Light gray (Esri)": grayBase, "OpenStreetMap": osmBase };
-if (positron) bases = Object.assign({ "Light (Positron)": positron }, bases);
-(positron || grayBase).addTo(map);
+const bases = { "OpenStreetMap": osmBase };
+if (positron) bases["Light (Positron)"] = positron;
+bases["Light gray (Esri)"] = grayBase;
+osmBase.addTo(map);
 L.control.layers(bases, { "Zones": zoneLayer, "Labels": labelLayer,
                          "Streets (by suffix)": streetLayer },
                  { collapsed: false }).addTo(map);
