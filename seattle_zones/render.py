@@ -36,11 +36,18 @@ const colors = __COLORS__;
 const labels = __LABELS__;
 
 const map = L.map("map");
-// CARTO tiles load from file:// pages; openstreetmap.org tiles need a Referer.
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-  maxZoom: 20, subdomains: "abcd",
-  attribution: "&copy; OpenStreetMap contributors &copy; CARTO"
-}).addTo(map);
+// Esri's canvas tiles need no API key and load from file:// pages.
+// openstreetmap.org tiles need a Referer, so they may only work when served over http.
+const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
+const esriOpts = { maxNativeZoom: 16, maxZoom: 19,
+                   attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors" };
+const grayBase = L.layerGroup([
+  L.tileLayer(esri + "World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", esriOpts),
+  L.tileLayer(esri + "World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", esriOpts),
+]).addTo(map);
+const osmBase = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+});
 
 const color = z => colors[z] || "#000";
 const zoneLayer = L.geoJSON(zones, {
@@ -66,7 +73,7 @@ const labelLayer = L.layerGroup(zones.features.filter(f => f.properties.zone !==
   }))).addTo(map);
 
 map.fitBounds(zoneLayer.getBounds());
-L.control.layers(null, { "Zones": zoneLayer, "Labels": labelLayer,
+L.control.layers({ "Light gray (Esri)": grayBase, "OpenStreetMap": osmBase }, { "Zones": zoneLayer, "Labels": labelLayer,
                          "Streets (by suffix)": streetLayer },
                  { collapsed: false }).addTo(map);
 </script>
