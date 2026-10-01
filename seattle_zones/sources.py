@@ -36,6 +36,8 @@ def fetch_osm(cache_path, refresh=False, url=OVERPASS_URL):
         import requests
 
         query = OVERPASS_QUERY.format(types="|".join(HIGHWAY_TYPES))
+        print("Downloading Seattle streets from OpenStreetMap "
+              "(first run only; this can take a few minutes)...", flush=True)
         resp = requests.post(url, data={"data": query}, timeout=360,
                              headers={"User-Agent": "seattle_zones/0.1"})
         resp.raise_for_status()
