@@ -26,6 +26,9 @@ def main(argv=None):
                    help="cells further than this from any street are left blank")
     p.add_argument("--unlabeled-weight", type=float, default=0.5,
                    help="vote weight for streets with no directional")
+    p.add_argument("--fill-area", type=float, default=0.8,
+                   help="drop zone specks and fill holes smaller than this, in km² "
+                   "(0 keeps them all)")
     p.add_argument("--no-streets", action="store_true",
                    help="leave the street layer out of the HTML map (smaller file)")
     args = p.parse_args(argv)
@@ -42,7 +45,8 @@ def main(argv=None):
         print(f"  {zone:>4}: {n}")
 
     features = zones.build_zones(labelled, cell=args.cell, radius=args.radius,
-                                 reach=args.reach, unlabeled_weight=args.unlabeled_weight)
+                                 reach=args.reach, unlabeled_weight=args.unlabeled_weight,
+                                 fill_area=args.fill_area * 1e6)
     zone_fc = {"type": "FeatureCollection", "features": features}
     street_fc = zones.streets_geojson(labelled)
 

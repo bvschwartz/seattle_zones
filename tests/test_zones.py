@@ -12,7 +12,9 @@ from seattle_zones.__main__ import main
 
 LON0, LON1 = -122.42, -122.26
 LAT0, LAT1 = 47.52, 47.72
-LAKE = (-122.30, -122.27, 47.55, 47.60)  # a hole with no streets
+LAKE = (-122.30, -122.27, 47.55, 47.60)  # a big hole with no streets
+PARK = (-122.40, -122.39, 47.68, 47.685)  # a small hole inside NW (~0.4 km²)
+SPECK = (-122.345, -122.338, 47.69, 47.695)  # a few NE-named streets inside N
 
 
 def expected_zone(lon, lat):
@@ -23,8 +25,12 @@ def expected_zone(lon, lat):
     return "SW" if lon < -122.36 else "S"
 
 
+def inside(box, lon, lat):
+    return box[0] < lon < box[1] and box[2] < lat < box[3]
+
+
 def in_lake(lon, lat):
-    return LAKE[0] < lon < LAKE[1] and LAKE[2] < lat < LAKE[3]
+    return inside(LAKE, lon, lat) or inside(PARK, lon, lat)
 
 
 def synthetic_streets(step=0.003):
@@ -34,7 +40,7 @@ def synthetic_streets(step=0.003):
     while lat < LAT1:
         lon = LON0
         while lon < LON1:
-            zone = expected_zone(lon, lat)
+            zone = "NE" if inside(SPECK, lon, lat) else expected_zone(lon, lat)
             for end in ((lon + step, lat), (lon, lat + step)):
                 if in_lake(lon, lat) or in_lake(*end):
                     continue
@@ -83,6 +89,14 @@ class BuildZonesTest(unittest.TestCase):
         centre = Point((LAKE[0] + LAKE[1]) / 2, (LAKE[2] + LAKE[3]) / 2)
         for zone, geom in self.features.items():
             self.assertFalse(geom.contains(centre), zone)
+
+    def test_small_hole_filled_and_speck_absorbed(self):
+        park = Point((PARK[0] + PARK[1]) / 2, (PARK[2] + PARK[3]) / 2)
+        speck = Point((SPECK[0] + SPECK[1]) / 2, (SPECK[2] + SPECK[3]) / 2)
+        self.assertTrue(self.features["NW"].contains(park))
+        self.assertTrue(self.features["N"].contains(speck))
+        self.assertFalse(self.features["NE"].contains(speck))
+        self.assertEqual(self.features["NE"].geom_type, "Polygon")
 
     def test_zones_do_not_overlap_much(self):
         names = list(self.features)

@@ -17,7 +17,7 @@ import numpy as np
 from scipy.ndimage import generic_filter
 from scipy.spatial import cKDTree
 from shapely import box, union_all
-from shapely.geometry import mapping
+from shapely.geometry import Polygon, mapping
 from shapely.ops import polylabel, transform
 
 from .directions import NONE, parse_direction
@@ -75,7 +75,7 @@ def _mode(values):
 
 
 def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
-                k=24, unlabeled_weight=0.5, smooth_passes=2, min_area=40_000.0,
+                k=24, unlabeled_weight=0.5, smooth_passes=2, fill_area=0.8e6,
                 label_area=3e6):
     """Compute zone polygons.
 
@@ -84,7 +84,10 @@ def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
     radius: how far a street point can vote (m). reach: a cell further than
     this from every street is treated as not-land/no-street and left empty.
     unlabeled_weight: vote weight for streets with no directional.
-    min_area: drop polygon pieces smaller than this (m^2).
+    fill_area: separate pieces of a zone smaller than this (m^2) are dropped,
+    and holes smaller than this are filled by the zone around them. Zones never
+    nest, so a speck of one zone inside another just becomes part of the other.
+    Bigger holes (Green Lake, about 1 km^2) are left open.
     label_area: besides the largest piece, pieces at least this big (m^2) get
     their own label point.
 
@@ -141,10 +144,7 @@ def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
         if geom.is_empty:
             continue
         geom = geom.buffer(cell * 0.6, join_style="round").buffer(-cell * 0.6).simplify(cell / 2)
-        parts = getattr(geom, "geoms", [geom])
-        geom = union_all([p for p in parts if p.area >= min_area])
-        if geom.is_empty:
-            continue
+        geom = _drop_specks_and_fill_holes(geom, fill_area)
         area = geom.area
         labels = _label_points(geom, label_area, cell)
         geom = transform(lambda x, y, z=None: proj.inverse(x, y), geom)
@@ -159,6 +159,17 @@ def build_zones(labelled, cell=50.0, step=20.0, radius=250.0, reach=150.0,
             "geometry": mapping(geom),
         })
     return features
+
+
+def _drop_specks_and_fill_holes(geom, fill_area):
+    """Remove small separate pieces (always keeping the largest) and fill
+    small holes."""
+    parts = sorted(getattr(geom, "geoms", [geom]), key=lambda p: p.area, reverse=True)
+    parts = parts[:1] + [p for p in parts[1:] if p.area >= fill_area]
+    return union_all([
+        Polygon(p.exterior, [h for h in p.interiors if Polygon(h).area >= fill_area])
+        for p in parts
+    ])
 
 
 def _label_points(geom, label_area, tolerance):

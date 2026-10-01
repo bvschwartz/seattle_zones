@@ -19,7 +19,9 @@ begins and ends, using the street names themselves as the data.
 3. **Vote on a grid.** A 50 m grid covers the city. Each cell takes a
    distance-weighted vote of nearby street labels. Cells more than 150 m from
    any street (lakes, Puget Sound, big parks) stay blank. A majority filter
-   cleans up stray cells.
+   cleans up stray cells. Since zones never sit inside one another, small
+   specks of one zone inside another are dropped and small holes (parks,
+   ponds) are filled by the zone around them.
 4. **Polygonize.** Each zone's cells are merged into smoothed polygons and
    written out as GeoJSON plus an interactive Leaflet map.
 
@@ -56,7 +58,8 @@ the full street name.)
 Tuning options: `--cell` (grid size, m), `--radius` (how far a street's vote
 reaches, m), `--reach` (max distance from a street before a cell is left blank),
 `--unlabeled-weight` (vote weight of streets with no directional; lower it if
-the downtown zone spreads too far). Run `python -m seattle_zones -h` for all.
+the downtown zone spreads too far), `--fill-area` (specks and holes smaller than this many
+km² are merged into the surrounding zone; default 0.8, which keeps Green Lake). Run `python -m seattle_zones -h` for all.
 
 ## Tests
 
