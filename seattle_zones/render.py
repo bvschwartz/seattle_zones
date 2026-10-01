@@ -36,8 +36,10 @@ const colors = __COLORS__;
 const labels = __LABELS__;
 
 const map = L.map("map");
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+// CARTO tiles load from file:// pages; openstreetmap.org tiles need a Referer.
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+  maxZoom: 20, subdomains: "abcd",
+  attribution: "&copy; OpenStreetMap contributors &copy; CARTO"
 }).addTo(map);
 
 const color = z => colors[z] || "#000";
