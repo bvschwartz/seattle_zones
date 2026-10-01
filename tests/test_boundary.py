@@ -74,6 +74,37 @@ class FetchOsmCacheTest(unittest.TestCase):
             with open(os.path.join(out, "map.html")) as f:
                 self.assertIn("<title>Testville Directional Zones</title>", f.read())
 
+    def test_several_places_smaller_wins(self):
+        # A "county" covering the whole grid and a "city" inside it. Listed
+        # county first to check that order doesn't matter.
+        county = box(LON0, LAT0, LON1, LAT1)
+        city = box(-122.38, 47.60, -122.30, 47.66)
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "data"))
+            for name, outline in (("testcounty", county), ("testcity", city)):
+                with open(os.path.join(tmp, "data", name + ".json"), "w") as f:
+                    json.dump(overpass_response(synthetic_streets(), outline), f)
+            out = os.path.join(tmp, "out")
+            cwd = os.getcwd()
+            os.chdir(tmp)  # default cache paths are data/<place>.json
+            try:
+                main(["--place", "Testcounty", "--place", "Testcity", "--out", out])
+            finally:
+                os.chdir(cwd)
+            with open(os.path.join(out, "zones.geojson")) as f:
+                fc = json.load(f)
+            with open(os.path.join(out, "boundaries.geojson")) as f:
+                self.assertEqual(len(json.load(f)["features"]), 2)
+        by_place = {}
+        for feat in fc["features"]:
+            by_place.setdefault(feat["properties"]["place"], []).append(shape(feat["geometry"]))
+        self.assertEqual(set(by_place), {"Testcounty", "Testcity"})
+        inner = city.buffer(-0.002)
+        for geom in by_place["Testcounty"]:
+            self.assertLess(geom.intersection(inner).area, 1e-9)
+        for geom in by_place["Testcity"]:
+            self.assertLess(geom.difference(city).area, 1e-9)
+
     def test_empty_download_explains(self):
         with tempfile.TemporaryDirectory() as tmp:
             cache = os.path.join(tmp, "nowhere.json")

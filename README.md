@@ -60,11 +60,26 @@ Names ending in "County" are looked up as counties, anything else as a city
 `US-WA`. A county download is much bigger than Seattle's and can take several
 minutes; if Overpass times out, run it again later.
 
+Several places on one map: repeat `--place`. Where places overlap (Seattle
+and Shoreline are inside King County), the smaller place wins, so each area
+shows the zones of the grid that actually applies there. The same zone name
+can appear several times, once per grid.
+
+```sh
+python -m seattle_zones --place Seattle --place Shoreline \
+    --place "King County" --place "Snohomish County"     # output/combined/
+```
+
+With that many streets the street layer is left out of `map.html` to keep it
+fast (`--streets` forces it in); `streets.geojson` is still written.
+
 Outputs in `output/<place>/`:
 
 - `zones.geojson`: one (multi)polygon per zone, with `zone` and `area_km2`
 - `streets.geojson`: every street segment with its parsed `zone`
-- `map.html`: zones and streets on an OpenStreetMap basemap; hover for names
+- `boundaries.geojson`: the city / county limits used for trimming
+- `map.html`: labelled zones and place limits on an OpenStreetMap basemap,
+  with an optional street layer
 
 Using City of Seattle data instead:
 

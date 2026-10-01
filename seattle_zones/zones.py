@@ -158,7 +158,7 @@ def build_zones(labelled, boundary=None, cell=50.0, step=20.0, radius=250.0, rea
                 continue
         geom = _drop_specks_and_fill_holes(geom, fill_area)
         area = geom.area
-        labels = _label_points(geom, label_area, cell)
+        labels = _label_points(geom, label_area, fill_area, cell)
         geom = transform(lambda x, y, z=None: proj.inverse(x, y), geom)
         features.append({
             "type": "Feature",
@@ -190,10 +190,15 @@ def _drop_specks_and_fill_holes(geom, fill_area):
     ])
 
 
-def _label_points(geom, label_area, tolerance):
-    """Interior points far from the edges: the largest piece, plus big ones."""
+def _label_points(geom, label_area, min_area, tolerance):
+    """Interior points far from the edges: the largest piece, plus big ones.
+
+    A zone whose largest piece is under min_area is a sliver (e.g. where a
+    city boundary clips the edge of a zone) and gets no label.
+    """
     parts = sorted(getattr(geom, "geoms", [geom]), key=lambda p: p.area, reverse=True)
-    parts = parts[:1] + [p for p in parts[1:] if p.area >= label_area]
+    parts = [p for p in parts[:1] if p.area >= min_area] + \
+            [p for p in parts[1:] if p.area >= label_area]
     return [polylabel(p, tolerance).coords[0] for p in parts]
 
 

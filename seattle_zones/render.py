@@ -12,6 +12,8 @@ COLORS = {
 
 LABELS = {"none": "no direction"}
 
+EMPTY = {"type": "FeatureCollection", "features": []}
+
 TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
@@ -36,6 +38,7 @@ TEMPLATE = """<!doctype html>
 <script>
 const zones = __ZONES__;
 const streets = __STREETS__;
+const boundaries = __BOUNDARIES__;
 const colors = __COLORS__;
 const labels = __LABELS__;
 
@@ -60,18 +63,22 @@ const osmBase = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 });
 
 const color = z => colors[z] || "#000";
+// No hover text: the map is meant to be read as-is.
 const zoneLayer = L.geoJSON(zones, {
+  interactive: false,
   // The no-direction (downtown) zone is outlined only: no fill, no label.
   style: f => f.properties.zone === "none"
     ? { color: color("none"), weight: 1.5, fill: false }
-    : { color: color(f.properties.zone), weight: 2, fillOpacity: 0.35 },
-  onEachFeature: (f, l) => l.bindTooltip(
-    `${labels[f.properties.zone] || f.properties.zone} &middot; ${f.properties.area_km2} km&sup2;`,
-    { sticky: true })
+    : { color: color(f.properties.zone), weight: 2, fillOpacity: 0.35 }
+}).addTo(map);
+// City / county limits; on a multi-place map these separate one grid from the next.
+const boundaryLayer = L.geoJSON(boundaries, {
+  interactive: false,
+  style: { color: "#222", weight: 1.5, dashArray: "6 4", fill: false }
 }).addTo(map);
 const streetLayer = L.geoJSON(streets, {
-  style: f => ({ color: color(f.properties.zone), weight: 1.5, opacity: 0.9 }),
-  onEachFeature: (f, l) => l.bindTooltip(f.properties.name, { sticky: true })
+  interactive: false,
+  style: f => ({ color: color(f.properties.zone), weight: 1.5, opacity: 0.9 })
 });
 // Zone names at a point well inside each region (computed in zones.py).
 const labelLayer = L.layerGroup(zones.features.filter(f => f.properties.zone !== "none").flatMap(f =>
@@ -87,7 +94,7 @@ const bases = { "OpenStreetMap": osmBase };
 if (positron) bases["Light (Positron)"] = positron;
 bases["Light gray (Esri)"] = grayBase;
 osmBase.addTo(map);
-L.control.layers(bases, { "Zones": zoneLayer, "Labels": labelLayer,
+L.control.layers(bases, { "Zones": zoneLayer, "Labels": labelLayer, "Boundaries": boundaryLayer,
                          "Streets (by suffix)": streetLayer },
                  { collapsed: false }).addTo(map);
 </script>
@@ -96,11 +103,12 @@ L.control.layers(bases, { "Zones": zoneLayer, "Labels": labelLayer,
 """
 
 
-def write_map(path, zones, streets=None, title="Seattle Directional Zones"):
+def write_map(path, zones, streets=None, title="Seattle Directional Zones", boundaries=None):
     html = (TEMPLATE
             .replace("__TITLE__", html_escape(title))
             .replace("__ZONES__", json.dumps(zones))
-            .replace("__STREETS__", json.dumps(streets or {"type": "FeatureCollection", "features": []}))
+            .replace("__STREETS__", json.dumps(streets or EMPTY))
+            .replace("__BOUNDARIES__", json.dumps(boundaries or EMPTY))
             .replace("__COLORS__", json.dumps(COLORS))
             .replace("__LABELS__", json.dumps(LABELS)))
     with open(path, "w") as f:
