@@ -19,6 +19,9 @@ TEMPLATE = """<!doctype html>
 <title>Seattle Directional Zones</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/dist/leaflet-maplibre-gl.js"></script>
 <style>
   html, body, #map { height: 100%; margin: 0; }
   .zone-label { color: #000; font: bold 18px/20px system-ui, sans-serif; white-space: nowrap;
@@ -36,6 +39,12 @@ const colors = __COLORS__;
 const labels = __LABELS__;
 
 const map = L.map("map");
+// Positron, the clean light style CARTO made popular, served keyless by
+// OpenFreeMap as vector tiles (drawn by MapLibre GL).
+const positron = L.maplibreGL ? L.maplibreGL({
+  style: "https://tiles.openfreemap.org/styles/positron",
+  attribution: '<a href="https://openfreemap.org">OpenFreeMap</a> &copy; OpenMapTiles &copy; OpenStreetMap contributors'
+}) : null;
 // Esri's canvas tiles need no API key and load from file:// pages.
 // openstreetmap.org tiles need a Referer, so they may only work when served over http.
 const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
@@ -44,7 +53,7 @@ const esriOpts = { maxNativeZoom: 16, maxZoom: 19,
 const grayBase = L.layerGroup([
   L.tileLayer(esri + "World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", esriOpts),
   L.tileLayer(esri + "World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", esriOpts),
-]).addTo(map);
+]);
 const osmBase = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
 });
@@ -73,7 +82,10 @@ const labelLayer = L.layerGroup(zones.features.filter(f => f.properties.zone !==
   }))).addTo(map);
 
 map.fitBounds(zoneLayer.getBounds());
-L.control.layers({ "Light gray (Esri)": grayBase, "OpenStreetMap": osmBase }, { "Zones": zoneLayer, "Labels": labelLayer,
+let bases = { "Light gray (Esri)": grayBase, "OpenStreetMap": osmBase };
+if (positron) bases = Object.assign({ "Light (Positron)": positron }, bases);
+(positron || grayBase).addTo(map);
+L.control.layers(bases, { "Zones": zoneLayer, "Labels": labelLayer,
                          "Streets (by suffix)": streetLayer },
                  { collapsed: false }).addTo(map);
 </script>
