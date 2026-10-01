@@ -44,7 +44,10 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
 
 const color = z => colors[z] || "#000";
 const zoneLayer = L.geoJSON(zones, {
-  style: f => ({ color: color(f.properties.zone), weight: 2, fillOpacity: 0.35 }),
+  // The no-direction (downtown) zone is outlined only: no fill, no label.
+  style: f => f.properties.zone === "none"
+    ? { color: color("none"), weight: 1.5, fill: false }
+    : { color: color(f.properties.zone), weight: 2, fillOpacity: 0.35 },
   onEachFeature: (f, l) => l.bindTooltip(
     `${labels[f.properties.zone] || f.properties.zone} &middot; ${f.properties.area_km2} km&sup2;`,
     { sticky: true })
@@ -54,7 +57,7 @@ const streetLayer = L.geoJSON(streets, {
   onEachFeature: (f, l) => l.bindTooltip(f.properties.name, { sticky: true })
 });
 // Zone names at a point well inside each region (computed in zones.py).
-const labelLayer = L.layerGroup(zones.features.flatMap(f =>
+const labelLayer = L.layerGroup(zones.features.filter(f => f.properties.zone !== "none").flatMap(f =>
   (f.properties.label_points || []).map(([lon, lat]) => {
     const text = labels[f.properties.zone] || f.properties.zone;
     const cls = "zone-label" + (text.length > 2 ? " small" : "");
